@@ -1,0 +1,250 @@
+#include "imports/stdlib.fc";
+
+
+const int fees::transfer_ton_fee = 10000000; ;; 0.01 TON
+const int fees::transfer_jetton_fee = 100000000; ;; 0.1 TON
+const int fees::guarantor_royalty = 1000000000; ;; 1 TON
+;; INFORMAL STORAGE TLB  SCHEME
+;; storage_data#_ 
+;;      successful_init:Bool  
+;;      jetton_wallet_address:MsgAddress    if we are ton_escrow then must be Null address ($00)
+;;      grams:Grams 
+;;      admin_address:MsgAddressInt
+;;      seller_address:MsgAddressInt
+;;      successful_deposit:Bool
+;;      contract_id: uint64                to deploy multiple contracts
+;;      Buyer_address:^MsgAddressInt
+;;      = StorageData;
+
+const op::init_jetton_escrow = "op::init_jetton_escrow"c;
+;;  init_jetton_escrow#dd54e640 
+;;      query_id:uint64 
+;;      jetton_wallet_address:MsgAddressInt
+;;      amount:Grams
+;;      = InternalMsgBody;
+
+const op::init_ton_escrow = "op::init_ton_escrow"c;
+;; init_ton_escrow#db4d22ac
+;;      query_id:uint64
+;;      amount:Grams
+;;      = InternalMsgBody;
+
+const op::deposit_ton = "op:deposit_ton"c;
+;; deposit_ton#17638dd1
+;;      query_id:uint64
+;;      = InternalMsgBody
+
+const op:jetton_trasfer = 0x0f8a7ea5;
+const op::trasfer_notification = 0x7362d09c; ;;It is literally deposit_jetton
+;; transfer_notification#7362d09c 
+;;      query_id:uint64 
+;;      amount:Grams
+;;      sender:MsgAddress 
+;;      forward_payload:(Either Cell ^Cell)
+;;      = InternalMsgBody;
+;;      
+
+const op::seller_payoff = "op:seller_payoff"c;
+;; seller_payoff#42d1fd1b
+;;      query_id:uint64
+;;      = InternalMsgBody;
+const op::successful_payoff = "op::successful_payoff"c;
+
+
+global int storage::successful_init;
+global slice storage::jetton_wallet_address;
+global int storage::amount;
+global slice storage::admin_address;
+global slice storage::seller_address;
+global int storage::successful_deposit;
+global slice storage::buyer_address;
+
+
+() load_data() impure {
+    var ds = get_data().begin_parse();
+    storage::successful_init = ds~load_uint(1);
+    storage::jetton_wallet_address = ds~load_msg_addr();
+    storage::amount = ds~load_coins();
+    storage::admin_address = ds~load_msg_addr();
+    storage::seller_address = ds~load_msg_addr();
+    storage::successful_deposit = ds~load_uint(1);
+    ds~load_uint(64);
+    var dds = ds~load_ref().begin_parse();
+    storage::buyer_address = dds~load_msg_addr();
+    ds.end_parse();
+}
+
+() save_data() impure {
+    set_data(
+        begin_cell()
+            .store_uint(storage::successful_init, 1)
+            .store_slice(storage::jetton_wallet_address)
+            .store_coins(storage::amount)
+            .store_slice(storage::admin_address)
+            .store_slice(storage::seller_address)
+            .store_uint(storage::successful_deposit, 1)
+            .store_uint(0, 64) ;; Contract id and we don't care about it. Needed only for deploying to multiple addresses
+            .store_ref(
+                begin_cell()
+                    .store_slice(storage::buyer_address)
+                .end_cell()
+            )
+            .end_cell()
+    );
+}
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore all empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+
+    load_data(); ;; Load global variables
+    
+    int op = in_msg_body~load_uint(32);
+    int query_id = in_msg_body~load_uint(64);
+    slice msg_sender = cs~load_msg_addr();
+    if (op == op::init_jetton_escrow) { ;; It is needed because jetton wallet address depends on jetton_owner address (hash), so we cant store it it StateInit directly
+        throw_if(703, storage::successful_init);
+        throw_unless(705, msg_value >= fees::transfer_jetton_fee + fees::guarantor_royalty);
+        
+        storage::jetton_wallet_address = in_msg_body~load_msg_addr();
+        storage::amount = in_msg_body~load_coins();
+        storage::successful_init = 1;
+        storage::seller_address = msg_sender;
+        save_data();
+        return ();
+    }
+    if (op == op::init_ton_escrow) {
+        throw_if(704, storage::successful_init);
+        throw_unless(706, msg_value >= fees::transfer_ton_fee + fees::guarantor_royalty);
+
+        storage::amount = in_msg_body~load_coins();
+        storage::successful_init = 1;
+        storage::seller_address = msg_sender;
+        save_data();
+        return ();
+    }
+
+    if (op == op::deposit_ton) {
+        throw_unless(701, storage::successful_init);
+        throw_unless(702, msg_value >= storage::amount + fees::transfer_ton_fee);
+
+        raw_reserve(storage::amount + fees::guarantor_royalty + fees::transfer_ton_fee, 0); ;; Mode 0 - reserve exact amount of nanotons
+ 
+        var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(msg_sender)
+            .store_coins(0)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(op, 32)
+            .store_uint(query_id, 64);
+
+        send_raw_message(msg.end_cell(), 128);
+
+        storage::successful_deposit = 1;
+        save_data();
+        return ();
+    }
+    if(op == op::trasfer_notification) { ;; This is deposit jetton operation
+        throw_unless(707, storage::successful_init);
+        throw_unless(708, equal_slices(msg_sender, storage::jetton_wallet_address));
+        int jetton_amount = in_msg_body~load_coins();
+        ;;TODO If we have enough tons we can send jettons back to sender
+
+        ;; We cannot send jettons back because maybe we have not enough tons.
+        throw_unless(707, jetton_amount >= storage::amount);
+        slice buyer_address = in_msg_body~load_msg_addr();
+        storage::buyer_address = buyer_address;
+
+        storage::successful_deposit = 1;
+        save_data();
+        return ();
+    }
+
+    if (op == op::seller_payoff) {
+        throw_unless(709, storage::successful_init);
+        throw_unless(710, equal_slices(msg_sender, storage::admin_address));
+        throw_unless(711, storage::successful_deposit);
+        
+        ;; Send royalty to admin
+        var royalty_msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(storage::admin_address)
+            .store_coins(fees::guarantor_royalty)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+
+        send_raw_message(royalty_msg.end_cell(), 0);
+
+        ;; In this case we need to payoff tons to seller
+        if(storage::jetton_wallet_address.slice_bits() == 2) { ;; Because empty address is $00
+            var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(storage::seller_address)
+            .store_coins(0)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(op::successful_payoff, 32)
+            .store_uint(query_id, 32);
+
+            send_raw_message(msg.end_cell(), 128); ;;TODO maybe use 128 + 32
+        }
+        else { ;; In this case we need to payoff jettons to seller
+            var body = begin_cell()
+                .store_uint(0xf8a7ea5, 32)
+                .store_uint(query_id, 64)
+                .store_coins(storage::amount)
+                .store_slice(storage::seller_address)
+                .store_slice(storage::seller_address)
+                .store_uint(0, 1)
+                .store_coins(1)
+                .store_uint(0, 1);
+
+            var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(storage::jetton_wallet_address)
+            .store_coins(fees::transfer_jetton_fee)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_ref(body.end_cell());
+
+            send_raw_message(msg.end_cell(), 128); ;;TODO maybe use 128 + 32
+        }
+        
+        return ();
+    }
+
+    throw(0xffff);
+}
+
+;; get methods are a means to conveniently read contract data using, for example, HTTP APIs
+;; they are marked with method_id
+;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
+
+int is_buyer_found() method_id {
+    load_data();
+    return storage::successful_deposit;
+}
+
+int is_contract_initialized() method_id {
+    load_data();
+    return storage::successful_init;
+}
+
+slice get_admin_address() method_id {
+    load_data();
+    return storage::admin_address;
+}
+
+slice get_seller_address() method_id {
+    load_data();
+    return storage::seller_address;
+}
+
+slice get_buyer_address() method_id {
+    load_data();
+    return storage::buyer_address;
+}

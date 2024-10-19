@@ -107,7 +107,7 @@ export class Escrow implements Contract {
             value: toNano("0.1"),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                .storeUint(Opcodes.deposit_ton, 32)
+                .storeUint(Opcodes.sellet_payoff, 32)
                 .storeUint(0, 64)
                 .endCell(),
         });

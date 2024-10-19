@@ -68,10 +68,9 @@ global slice storage::buyer_address;
     storage::admin_address = ds~load_msg_addr();
     storage::seller_address = ds~load_msg_addr();
     storage::successful_deposit = ds~load_uint(1);
-    ds~load_uint(64);
+    ;;ds~load_uint(64); Here is contract_id but we don't need it
     var dds = ds~load_ref().begin_parse();
     storage::buyer_address = dds~load_msg_addr();
-    ds.end_parse();
 }
 
 () save_data() impure {
@@ -83,7 +82,7 @@ global slice storage::buyer_address;
             .store_slice(storage::admin_address)
             .store_slice(storage::seller_address)
             .store_uint(storage::successful_deposit, 1)
-            .store_uint(0, 64) ;; Contract id and we don't care about it. Needed only for deploying to multiple addresses
+            ;;.store_uint(0, 64) ;; Contract id and we don't care about it. Needed only for deploying to multiple addresses
             .store_ref(
                 begin_cell()
                     .store_slice(storage::buyer_address)

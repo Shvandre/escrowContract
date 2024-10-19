@@ -198,15 +198,16 @@ describe('Escrow', () => {
         });
     });
     it('should pay TON to seller if evetyrhing is correct', async ()=> {
-        const depositResult = await escrowTon.sendDepositTon(buyer.getSender(), escrowTonAmount + toNano("0.2")); //0.2 ton for fees
+
+        const depositResult = await escrowTon.sendDepositTon(deployer.getSender(), escrowTonAmount + toNano("0.2")); //0.2 ton for fees
         
         expect(depositResult.transactions).toHaveTransaction({
-            from: buyer.address,
+            from: deployer.address,
             to: escrowTon.address,
             deploy: false,
             success: true,
         });
-
+        
         const payoffResult = await escrowTon.sendSellerPayoff(adminWallet.getSender());
 
         expect(payoffResult.transactions).toHaveTransaction({
@@ -214,7 +215,9 @@ describe('Escrow', () => {
             to: deployer.address,
             deploy: false,
             success: true,
-            op: 0xc7c1982e,
+            op: 0xc7c1982e, // op::successful_payoff
         })
     });
+
+    
 });

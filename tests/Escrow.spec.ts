@@ -197,7 +197,7 @@ describe('Escrow', () => {
             success: false,
         });
     });
-    it('should pay TON to seller if evetyrhing is correct', async ()=> {
+    it('should pay TON to seller and Royalty to admin if evetyrhing is correct', async ()=> {
 
         const depositResult = await escrowTon.sendDepositTon(deployer.getSender(), escrowTonAmount + toNano("0.2")); //0.2 ton for fees
         
@@ -216,8 +216,49 @@ describe('Escrow', () => {
             deploy: false,
             success: true,
             op: 0xc7c1982e, // op::successful_payoff
-        })
+        });
+        
+
+        //Admin royalty payoff
+        expect(payoffResult.transactions).toHaveTransaction({
+            from: escrowTon.address,
+            to: adminWallet.address,
+            deploy: false,
+            success: true,
+            op: 0xdb8f99a9, // op::royalty_payoff
+        });
     });
 
+    it('should pay Jetton to seller and Royalty to admin if evetyrhing is correct', async ()=> {
+        const jettonSender = randomAddress();
+        const depositResult = await escrowJetton.sendDepositJetton(jettonWallet.getSender(), escrowJettonAmount, jettonSender);
+
+        expect(depositResult.transactions).toHaveTransaction({
+            from: jettonWallet.address,
+            to: escrowJetton.address,
+            deploy: false,
+            success: true,
+        });
+
+        const payoffResult = await escrowJetton.sendSellerPayoff(adminWallet.getSender());
+
+        expect(payoffResult.transactions).toHaveTransaction({
+            from: escrowJetton.address,
+            to: jettonWallet.address,
+            deploy: false,
+            success: true,
+            op: 0xf8a7ea5, // op::trasfer
+        })
+
+        //Admin royalty payoff
+        expect(payoffResult.transactions).toHaveTransaction({
+            from: escrowJetton.address,
+            to: adminWallet.address,
+            deploy: false,
+            success: true,
+            op: 0xdb8f99a9, // op::royalty_payoff
+        });
+    });
+    
     
 });

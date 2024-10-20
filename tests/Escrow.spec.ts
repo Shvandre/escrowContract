@@ -1,6 +1,6 @@
 import { Blockchain, BlockchainTransaction, SandboxContract, TreasuryContract, Verbosity } from '@ton/sandbox';
 import { Cell, toNano } from '@ton/core';
-import { Escrow } from '../wrappers/Escrow';
+import { Escrow, Opcodes } from '../wrappers/Escrow';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import e from 'express';
@@ -260,5 +260,60 @@ describe('Escrow', () => {
         });
     });
     
+    it.only('should refund TON to buyer if admin requested refund', async ()=> {
+        const depositResult = await escrowTon.sendDepositTon(deployer.getSender(), escrowTonAmount + toNano("0.2")); //0.2 ton for fees
+        
+        expect(depositResult.transactions).toHaveTransaction({
+            from: deployer.address,
+            to: escrowTon.address,
+            deploy: false,
+            success: true,
+        });
+        
+        const refundResult = await escrowTon.sendBuyerRefund(adminWallet.getSender());
+        
+        for(let tx of refundResult.transactions){
+            console.log(tx.debugLogs);
+        }
+
+        expect(refundResult.transactions).toHaveTransaction({
+            from: escrowTon.address,
+            to: deployer.address,
+            deploy: false,
+            success: true,
+            op: Opcodes.buyer_refund, // op::refund
+        });
+        
+
+        //Admin royalty payoff
+        expect(refundResult.transactions).toHaveTransaction({
+            from: escrowTon.address,
+            to: adminWallet.address,
+            deploy: false,
+            success: true,
+            op: Opcodes.royalty_payoff,
+        });
+    });
     
+    it('should refund Jetton to buyer if admin requested refund', async ()=> {
+        const jettonSender = randomAddress();
+        const depositResult = await escrowJetton.sendDepositJetton(jettonWallet.getSender(), escrowJettonAmount, jettonSender);
+
+        expect(depositResult.transactions).toHaveTransaction({
+            from: jettonWallet.address,
+            to: escrowJetton.address,
+            deploy: false,
+            success: true,
+        });
+
+        const refundResult = await escrowJetton.sendBuyerRefund(adminWallet.getSender());
+
+        expect(refundResult.transactions).toHaveTransaction({
+            from: escrowJetton.address,
+            to: jettonWallet.address,
+            deploy: false,
+            success: true,
+            op: Opcodes.jetton_trasfer // op::trasfer
+        });
+    });
 });

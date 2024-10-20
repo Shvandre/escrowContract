@@ -44,12 +44,17 @@ const op::trasfer_notification = 0x7362d09c; ;;It is literally deposit_jetton
 ;;      = InternalMsgBody;
 ;;      
 
+const op::buyer_refund = "op:buyer_refund"c;
+;; buyer_refund#909e6102
+;;      query_id:uint64
+;;      = InternalMsgBody;
 const op::seller_payoff = "op:seller_payoff"c;
 ;; seller_payoff#42d1fd1b
 ;;      query_id:uint64
 ;;      = InternalMsgBody;
 const op::successful_payoff = "op::successful_payoff"c;
 const op::royalty_payoff = "op::royalty_payoff"c;
+
 
 global int storage::successful_init;
 global slice storage::jetton_wallet_address;
@@ -190,7 +195,7 @@ global slice storage::buyer_address;
             .store_coins(0)
             .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
             .store_uint(op::successful_payoff, 32)
-            .store_uint(query_id, 32);
+            .store_uint(query_id, 64);
 
             send_raw_message(msg.end_cell(), 128 + 32); ;; 128 - sendRemainingBalance, 32 - Destroy the contract
         }
@@ -217,7 +222,57 @@ global slice storage::buyer_address;
         
         return ();
     }
+    if(op == op::buyer_refund) {
+        throw_unless(712, storage::successful_init);
+        throw_unless(713, equal_slices(msg_sender, storage::admin_address));
+        throw_unless(714, storage::successful_deposit);
+        ~dump(my_balance);
+        ;; Send royalty to admin
+        var royalty_msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(storage::admin_address)
+            .store_coins(fees::guarantor_royalty)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(op::royalty_payoff, 32)
+            .store_uint(query_id, 64);
 
+        send_raw_message(royalty_msg.end_cell(), 0);
+
+        ;; In this case we need to payoff tons to seller
+        if(storage::jetton_wallet_address.slice_bits() == 2) { ;; Because empty address is $00
+            var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(storage::buyer_address)
+            .store_coins(0)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(op::successful_payoff, 32)
+            .store_uint(query_id, 64);
+
+            send_raw_message(msg.end_cell(), 128 + 32); ;; 128 - sendRemainingBalance, 32 - Destroy the contract
+        }
+        else { ;; In this case we need to payoff jettons to seller
+            var body = begin_cell()
+                .store_uint(op::jetton_trasfer, 32)
+                .store_uint(query_id, 64)
+                .store_coins(storage::amount)
+                .store_slice(storage::buyer_address)
+                .store_slice(storage::buyer_address)
+                .store_uint(0, 1)
+                .store_coins(1)
+                .store_uint(0, 1);
+
+            var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(storage::jetton_wallet_address)
+            .store_coins(fees::transfer_jetton_fee)
+            .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_ref(body.end_cell());
+
+            send_raw_message(msg.end_cell(), 128 + 32); ;; 128 - sendRemainingBalance, 32 - Destroy the contract
+        }
+        
+        return ();
+    }
     throw(0xffff);
 }
 

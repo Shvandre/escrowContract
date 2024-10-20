@@ -1,4 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from '@ton/core';
+import { getRandomValues, randomInt } from 'crypto';
 
 export type EscrowConfig = {
     adminAddress: Address;
@@ -38,6 +39,8 @@ export const Opcodes = {
     trasfer_notification: 0x7362d09c,
     deposit_jetton: 0x7ec367ec,
     sellet_payoff: 0x42d1fd1b,
+    buyer_refund: 0x909e6102,
+    royalty_payoff: 0xdb8f99a9,
 };
 
 export class Escrow implements Contract {
@@ -59,7 +62,7 @@ export class Escrow implements Contract {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
             .storeUint(Opcodes.init_ton_escrow, 32)
-            .storeUint(0, 64)
+            .storeUint(randomInt(2**64), 64)
             .storeCoins(tonAmount)
             .endCell(),
         });
@@ -112,7 +115,16 @@ export class Escrow implements Contract {
                 .endCell(),
         });
     }
-
+    async sendBuyerRefund(provider: ContractProvider, via: Sender) {
+        await provider.internal(via, {
+            value: toNano("0.1"),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(Opcodes.buyer_refund, 32)
+                .storeUint(0, 64)
+                .endCell(),
+        });
+    }
     async getIsBuyerFound(provider: ContractProvider) {
         const result = await provider.get('is_buyer_found', []);
         return result.stack.readBoolean();

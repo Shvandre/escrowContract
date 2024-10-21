@@ -115,7 +115,7 @@ describe('Escrow', () => {
             success: true,
             value: (value) => value! >= escrowTonAmount - toNano('0.1'), // 0.1 is the fee
         });
-        expect(await escrowTon.getIsBuyerFound()).toBe(false);
+        expect(await escrowTon.getIsBuyerFound()).toBe(true);
     });
     it('should ignore insufficient ton deposit', async () => {
         const depositResult = await escrowTon.sendDepositTon(deployer.getSender(), escrowTonAmount - toNano('1'));

@@ -1,6 +1,6 @@
 #include "imports/stdlib.fc";
 
-
+const int workchain = 0;
 const int fees::transfer_ton_fee = 10000000; ;; 0.01 TON
 const int fees::transfer_jetton_fee = 100000000; ;; 0.1 TON
 const int fees::guarantor_royalty = 1000000000; ;; 1 TON
@@ -113,6 +113,8 @@ global slice storage::buyer_address;
     int op = in_msg_body~load_uint(32);
     int query_id = in_msg_body~load_uint(64);
     slice msg_sender = cs~load_msg_addr();
+    (int wc, _) = parse_std_addr(msg_sender);
+    throw_unless(800, wc == workchain);
     if (op == op::init_jetton_escrow) { ;; It is needed because jetton wallet address depends on jetton_owner address (hash), so we cant store it it StateInit directly
         throw_if(703, storage::successful_init);
         throw_unless(705, msg_value >= fees::transfer_jetton_fee + fees::guarantor_royalty);
@@ -161,16 +163,7 @@ global slice storage::buyer_address;
         throw_unless(707, storage::successful_init);
         throw_unless(708, equal_slices(msg_sender, storage::jetton_wallet_address));
         int jetton_amount = in_msg_body~load_coins();
-        ;;if (msg_value >= fees::transfer_jetton_fee & jetton_amount <= storage::amount) {
-        ;;    
-        ;;}
         throw_unless(707, jetton_amount >= storage::amount);
-        
-        
-        ;;TODO If we have enough tons we can send jettons back to sender
-
-        ;; We cannot send jettons back because maybe we have not enough tons.
-        
         slice buyer_address = in_msg_body~load_msg_addr();
 
         storage::buyer_address = buyer_address;

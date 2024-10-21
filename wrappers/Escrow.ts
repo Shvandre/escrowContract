@@ -62,7 +62,7 @@ export class Escrow implements Contract {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
             .storeUint(Opcodes.init_ton_escrow, 32)
-            .storeUint(randomInt(2**64), 64)
+            .storeUint(0, 64)
             .storeCoins(tonAmount)
             .endCell(),
         });

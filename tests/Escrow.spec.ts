@@ -93,6 +93,8 @@ describe('Escrow', () => {
             deploy: false,
             success: true,
         });
+        expect(await escrowTon.getIsBuyerFound()).toBe(true);
+        expect((await escrowTon.getBuyerAddress()).equals(deployer.address)).toBe(true);
     });
 
     it('should receive more than sufficient ton deposit and return extra TONs back', async () => {
@@ -113,7 +115,7 @@ describe('Escrow', () => {
             success: true,
             value: (value) => value! >= escrowTonAmount - toNano('0.1'), // 0.1 is the fee
         });
-        
+        expect(await escrowTon.getIsBuyerFound()).toBe(false);
     });
     it('should ignore insufficient ton deposit', async () => {
         const depositResult = await escrowTon.sendDepositTon(deployer.getSender(), escrowTonAmount - toNano('1'));
@@ -260,7 +262,7 @@ describe('Escrow', () => {
         });
     });
     
-    it.only('should refund TON to buyer if admin requested refund', async ()=> {
+    it('should refund TON to buyer if admin requested refund', async ()=> {
         const depositResult = await escrowTon.sendDepositTon(deployer.getSender(), escrowTonAmount + toNano("0.2")); //0.2 ton for fees
         
         expect(depositResult.transactions).toHaveTransaction({
@@ -276,6 +278,15 @@ describe('Escrow', () => {
             console.log(tx.debugLogs);
         }
 
+        //Admin royalty payoff
+        expect(refundResult.transactions).toHaveTransaction({
+            from: escrowTon.address,
+            to: adminWallet.address,
+            deploy: false,
+            success: true,
+            op: Opcodes.royalty_payoff,
+        });
+
         expect(refundResult.transactions).toHaveTransaction({
             from: escrowTon.address,
             to: deployer.address,
@@ -285,14 +296,7 @@ describe('Escrow', () => {
         });
         
 
-        //Admin royalty payoff
-        expect(refundResult.transactions).toHaveTransaction({
-            from: escrowTon.address,
-            to: adminWallet.address,
-            deploy: false,
-            success: true,
-            op: Opcodes.royalty_payoff,
-        });
+        
     });
     
     it('should refund Jetton to buyer if admin requested refund', async ()=> {
@@ -307,6 +311,14 @@ describe('Escrow', () => {
         });
 
         const refundResult = await escrowJetton.sendBuyerRefund(adminWallet.getSender());
+
+        expect(refundResult.transactions).toHaveTransaction({
+            from: escrowJetton.address,
+            to: adminWallet.address,
+            deploy: false,
+            success: true,
+            op: Opcodes.royalty_payoff
+        })
 
         expect(refundResult.transactions).toHaveTransaction({
             from: escrowJetton.address,

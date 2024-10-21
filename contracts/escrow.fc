@@ -138,6 +138,7 @@ global slice storage::buyer_address;
     if (op == op::deposit_ton) {
         throw_unless(701, storage::successful_init);
         throw_unless(702, msg_value >= storage::amount + fees::transfer_ton_fee);
+        throw_unless(713, storage::jetton_wallet_address.slice_bits() == 2); ;;throw unless this constract is for jettons
 
         raw_reserve(storage::amount + fees::guarantor_royalty + fees::transfer_ton_fee, 0); ;; Mode 0 - reserve exact amount of nanotons
  
@@ -151,6 +152,7 @@ global slice storage::buyer_address;
 
         send_raw_message(msg.end_cell(), 128);
 
+        storage::buyer_address = msg_sender;
         storage::successful_deposit = 1;
         save_data();
         return ();
@@ -159,13 +161,19 @@ global slice storage::buyer_address;
         throw_unless(707, storage::successful_init);
         throw_unless(708, equal_slices(msg_sender, storage::jetton_wallet_address));
         int jetton_amount = in_msg_body~load_coins();
+        ;;if (msg_value >= fees::transfer_jetton_fee & jetton_amount <= storage::amount) {
+        ;;    
+        ;;}
+        throw_unless(707, jetton_amount >= storage::amount);
+        
+        
         ;;TODO If we have enough tons we can send jettons back to sender
 
         ;; We cannot send jettons back because maybe we have not enough tons.
-        throw_unless(707, jetton_amount >= storage::amount);
+        
         slice buyer_address = in_msg_body~load_msg_addr();
-        storage::buyer_address = buyer_address;
 
+        storage::buyer_address = buyer_address;
         storage::successful_deposit = 1;
         save_data();
         return ();
@@ -226,7 +234,7 @@ global slice storage::buyer_address;
         throw_unless(712, storage::successful_init);
         throw_unless(713, equal_slices(msg_sender, storage::admin_address));
         throw_unless(714, storage::successful_deposit);
-        ~dump(my_balance);
+
         ;; Send royalty to admin
         var royalty_msg = begin_cell()
             .store_uint(0x18, 6)
@@ -237,15 +245,15 @@ global slice storage::buyer_address;
             .store_uint(query_id, 64);
 
         send_raw_message(royalty_msg.end_cell(), 0);
-
+        
         ;; In this case we need to payoff tons to seller
         if(storage::jetton_wallet_address.slice_bits() == 2) { ;; Because empty address is $00
             var msg = begin_cell()
             .store_uint(0x18, 6)
             .store_slice(storage::buyer_address)
-            .store_coins(0)
+            .store_coins(storage::amount)
             .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-            .store_uint(op::successful_payoff, 32)
+            .store_uint(op::buyer_refund, 32)
             .store_uint(query_id, 64);
 
             send_raw_message(msg.end_cell(), 128 + 32); ;; 128 - sendRemainingBalance, 32 - Destroy the contract
@@ -264,7 +272,7 @@ global slice storage::buyer_address;
             var msg = begin_cell()
             .store_uint(0x18, 6)
             .store_slice(storage::jetton_wallet_address)
-            .store_coins(fees::transfer_jetton_fee)
+            .store_coins(0) ;;We have at least fees::transfer_jetton_fee tons on our account (except storage fee but it doesnt't really matter)
             .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
             .store_ref(body.end_cell());
 

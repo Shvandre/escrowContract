@@ -1,5 +1,5 @@
 import { Blockchain, BlockchainTransaction, SandboxContract, TreasuryContract, Verbosity } from '@ton/sandbox';
-import { Cell, toNano } from '@ton/core';
+import { beginCell, Cell, toNano } from '@ton/core';
 import { Escrow, Opcodes } from '../wrappers/Escrow';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
@@ -66,7 +66,7 @@ describe('Escrow', () => {
             deploy: true,
             success: true,
         });
-        
+        expect(await escrowTon.getIsContractInitialized()).toBe(true);
 
         const deployResultJetton = await escrowJetton.sendDeployJettonEscrow(deployer.getSender(), 
                                                                             escrowJettonAmount, 
@@ -77,9 +77,12 @@ describe('Escrow', () => {
             deploy: true,
             success: true,
         });
+        expect(await escrowJetton.getIsContractInitialized()).toBe(true);
     });
 
     it('should deploy', async () => {
+
+        expect((await escrowTon.getAdminAddress()).equals(adminWallet.address)).toBe(true);
         // the check is done inside beforeEach
         // blockchain and escrow are ready to use
     });
@@ -132,6 +135,7 @@ describe('Escrow', () => {
             to: deployer.address,
             body: (body) => body!.beginParse().loadUint(32) === 0xffffffff, // Bounced transaction
         });
+        expect(await escrowTon.getIsBuyerFound()).toBe(false);
     });
 
     it('should receive sufficient jetton deposit', async () => {
@@ -144,7 +148,11 @@ describe('Escrow', () => {
             deploy: false,
             success: true,
         });
+        expect(await escrowJetton.getIsBuyerFound()).toBe(true);
+    });
 
+    it('should receive more than sufficient jetton deposit', async() => {
+        const jettonSender = randomAddress();
         const depositX2Result = await escrowJetton.sendDepositJetton(jettonWallet.getSender(), escrowJettonAmount * BigInt(2), jettonSender);
 
         expect(depositX2Result.transactions).toHaveTransaction({
@@ -153,7 +161,7 @@ describe('Escrow', () => {
             deploy: false,
             success: true,
         });
-        
+        expect(await escrowJetton.getIsBuyerFound()).toBe(true);
     });
     it('should ignore insufficient jetton deposit', async () => {
         const jettonSender = randomAddress();
@@ -166,6 +174,7 @@ describe('Escrow', () => {
             success: false,
             exitCode: 707,
         });
+        expect(await escrowJetton.getIsBuyerFound()).toBe(false);
     });
     it('should ignore jetton deposit from wrong wallet', async () => {
         const jettonSender = randomAddress();
@@ -178,6 +187,7 @@ describe('Escrow', () => {
             success: false,
             exitCode: 708,
         });
+        expect(await escrowJetton.getIsBuyerFound()).toBe(false);
     });
     it('should ignore jetton deposit if contract is for tonDeposit', async () => {
         const depositResult = await escrowTon.sendDepositJetton(jettonWallet.getSender(), escrowJettonAmount, randomAddress());
@@ -188,6 +198,7 @@ describe('Escrow', () => {
             deploy: false,
             success: false,
         });
+        expect(await escrowJetton.getIsBuyerFound()).toBe(false);
     });
     it('should ignore ton deposit if contract is for jettonDeposit', async () => {
         const depositResult = await escrowJetton.sendDepositTon(deployer.getSender(), escrowTonAmount);
@@ -198,6 +209,7 @@ describe('Escrow', () => {
             deploy: false,
             success: false,
         });
+        expect(await escrowTon.getIsBuyerFound()).toBe(false);
     });
     it('should pay TON to seller and Royalty to admin if evetyrhing is correct', async ()=> {
 
@@ -318,14 +330,24 @@ describe('Escrow', () => {
             deploy: false,
             success: true,
             op: Opcodes.royalty_payoff
-        })
+        });
 
         expect(refundResult.transactions).toHaveTransaction({
             from: escrowJetton.address,
             to: jettonWallet.address,
             deploy: false,
             success: true,
-            op: Opcodes.jetton_trasfer // op::trasfer
+            op: Opcodes.jetton_trasfer, // op::trasfer
+            body: beginCell()
+            .storeUint(Opcodes.jetton_trasfer, 32)
+            .storeUint(0, 64)
+            .storeCoins(escrowJettonAmount)
+            .storeAddress(jettonSender)
+            .storeAddress(jettonSender)
+            .storeUint(0, 1)
+            .storeCoins(1)
+            .storeUint(0, 1)
+            .endCell()
         });
     });
 });

@@ -1,7 +1,7 @@
 #include "imports/stdlib.fc";
 
 const int workchain = 0;
-const int fees::transfer_ton_fee = 30000000; ;; 0.03 TON
+const int fees::transfer_ton_fee = 30000000; ;; 0.01 TON
 const int fees::transfer_jetton_fee = 100000000; ;; 0.1 TON
 const int fees::guarantor_royalty = 1000000000; ;; 1 TON
 ;; INFORMAL STORAGE TLB  SCHEME
@@ -153,7 +153,7 @@ global slice storage::buyer_address;
                 .store_uint("Excess"c, 32)
                 .store_uint(query_id, 64);
 
-            send_raw_message(msg.end_cell(), 64);
+            send_raw_message(msg.end_cell(), 128);
         }
         storage::buyer_address = msg_sender;
         storage::successful_deposit = 1;

@@ -1,7 +1,7 @@
 #include "imports/stdlib.fc";
 
 const int workchain = 0;
-const int fees::transfer_ton_fee = 10000000; ;; 0.01 TON
+const int fees::transfer_ton_fee = 30000000; ;; 0.03 TON
 const int fees::transfer_jetton_fee = 100000000; ;; 0.1 TON
 const int fees::guarantor_royalty = 1000000000; ;; 1 TON
 ;; INFORMAL STORAGE TLB  SCHEME
@@ -143,17 +143,18 @@ global slice storage::buyer_address;
         throw_unless(713, storage::jetton_wallet_address.slice_bits() == 2); ;;throw unless this constract is for jettons
 
         raw_reserve(storage::amount + fees::guarantor_royalty + fees::transfer_ton_fee, 0); ;; Mode 0 - reserve exact amount of nanotons
- 
-        var msg = begin_cell()
-            .store_uint(0x18, 6)
-            .store_slice(msg_sender)
-            .store_coins(0)
-            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-            .store_uint("Excess"c, 32)
-            .store_uint(query_id, 64);
 
-        send_raw_message(msg.end_cell(), 128);
+        if(msg_value >= storage::amount + fees::transfer_ton_fee) {
+            var msg = begin_cell()
+                .store_uint(0x18, 6)
+                .store_slice(msg_sender)
+                .store_coins(0)
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                .store_uint("Excess"c, 32)
+                .store_uint(query_id, 64);
 
+            send_raw_message(msg.end_cell(), 64);
+        }
         storage::buyer_address = msg_sender;
         storage::successful_deposit = 1;
         save_data();

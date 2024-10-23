@@ -306,3 +306,8 @@ slice get_buyer_address() method_id {
     load_data();
     return storage::buyer_address;
 }
+
+slice get_needed_jetton_wallet() method_id {
+    load_data();
+    return storage::jetton_wallet_address;
+}

@@ -141,7 +141,7 @@ global slice storage::buyer_address;
         throw_unless(701, storage::successful_init);
         throw_unless(702, msg_value >= storage::amount);
         throw_unless(713, storage::jetton_wallet_address.slice_bits() == 2); ;;throw unless this constract is for jettons
-
+        ;; In case someone will send tons once more time, they will be returned
         raw_reserve(storage::amount + fees::guarantor_royalty + fees::transfer_ton_fee, 0); ;; Mode 0 - reserve exact amount of nanotons
 
         if(msg_value >= storage::amount + fees::transfer_ton_fee) {
